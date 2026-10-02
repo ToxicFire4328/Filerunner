@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FileRunner — Version 1</title>
+<style>
+:root{color-scheme:light dark;--bg:light-dark(#f5f7fb,#0e1117);--panel:light-dark(#fff,#171b23);--panel2:light-dark(#f0f3f8,#202632);--text:light-dark(#172033,#f2f5fa);--muted:light-dark(#657087,#a9b2c3);--border:light-dark(#d9deea,#303746);--accent:light-dark(#3b5bdb,#7c93ff);--danger:#d9485f}
+*{box-sizing:border-box}html,body{height:100%;margin:0}body{font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}button{font:inherit}.app{min-height:100%;display:grid;grid-template-rows:auto 1fr;background:var(--bg)}header{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid var(--border);background:var(--panel)}h1{font-size:19px;margin:0}.sub{font-size:12px;color:var(--muted);margin-top:2px}.actions{display:flex;gap:9px;flex-wrap:wrap}.btn{border:1px solid var(--border);background:var(--panel2);color:var(--text);border-radius:9px;padding:9px 13px;cursor:pointer}.btn.primary{background:var(--accent);border-color:var(--accent);color:white}.btn:disabled{opacity:.5;cursor:not-allowed}.workspace{display:grid;grid-template-columns:270px minmax(0,1fr);min-height:0}.sidebar{border-right:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;min-height:0}.side-title{padding:13px 15px;border-bottom:1px solid var(--border);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}#fileList{overflow:auto;padding:8px}.file{width:100%;display:flex;align-items:center;gap:9px;text-align:left;padding:9px 10px;border:0;background:transparent;color:var(--text);border-radius:7px;cursor:pointer}.file:hover,.file.active{background:var(--panel2)}.file small{margin-left:auto;color:var(--muted);font-size:10px}.empty{padding:20px 14px;color:var(--muted);font-size:13px;line-height:1.5}.main{display:grid;grid-template-rows:auto minmax(0,1fr);min-width:0;min-height:0}.tabs{display:flex;align-items:center;gap:4px;border-bottom:1px solid var(--border);background:var(--panel);padding:8px 10px}.tab{border:0;background:transparent;color:var(--muted);padding:8px 12px;border-radius:7px;cursor:pointer}.tab.active{background:var(--panel2);color:var(--text);font-weight:600}.content{min-height:0;background:var(--panel2);position:relative}.pane{position:absolute;inset:0;display:none}.pane.active{display:block}.preview-frame{width:100%;height:100%;border:0;background:white}.code{height:100%;overflow:auto;margin:0;padding:18px;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;white-space:pre;tab-size:2}.drop{position:absolute;inset:18px;border:2px dashed var(--border);border-radius:14px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);pointer-events:none;opacity:0;transition:.15s;background:color-mix(in srgb,var(--panel) 88%,transparent)}.drop.show{opacity:1}.drop strong{display:block;color:var(--text);font-size:18px;margin-bottom:5px}.status{position:absolute;left:14px;bottom:14px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;box-shadow:0 4px 18px #0002;max-width:min(500px,calc(100% - 28px))}.status.error{border-color:color-mix(in srgb,var(--danger) 60%,var(--border));color:var(--danger)}.media{width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:20px}.media img,.media video{max-width:100%;max-height:100%}.media audio{width:min(600px,90%)}.pdf{width:100%;height:100%;border:0}.unsupported{height:100%;display:grid;place-items:center;text-align:center;padding:30px;color:var(--muted)}.unsupported strong{color:var(--text);display:block;font-size:18px;margin-bottom:8px}.badge{display:inline-block;border:1px solid var(--border);padding:3px 7px;border-radius:99px;font-size:11px;margin-top:8px}
+@media(max-width:700px){.workspace{grid-template-columns:1fr}.sidebar{display:none}header{padding:13px 15px}.sub{display:none}.actions{gap:6px}.btn{padding:8px 10px}.tabs{overflow:auto}}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+<header><div><h1>FileRunner</h1><div class="sub">Version 1 · browser file previewer</div></div><div class="actions"><button class="btn primary" id="uploadBtn">Upload files</button><button class="btn" id="clearBtn" disabled>Clear</button><input id="fileInput" type="file" multiple hidden></div></header>
+<div class="workspace"><aside class="sidebar"><div class="side-title">Files</div><div id="fileList"><div class="empty">Upload HTML, CSS, JavaScript, images, text, audio, video, or PDF files.</div></div></aside>
+<main class="main"><nav class="tabs"><button class="tab active" data-tab="preview">Preview</button><button class="tab" data-tab="code">Code</button></nav><section class="content" id="content"><div class="pane active" id="previewPane"></div><div class="pane" id="codePane"><pre class="code" id="codeView"></pre></div><div class="drop" id="drop"><div><strong>Drop files here</strong>Release to add them to FileRunner</div></div><div class="status" id="status">Ready — upload files to begin.</div></section></main></div></div>
+<script>
+(() => {
+  'use strict';
+  const state = { files: new Map(), active: null, objectUrls: new Set() };
+  const $ = id => document.getElementById(id);
+  const fileInput = $('fileInput'), fileList = $('fileList'), previewPane = $('previewPane'), codeView = $('codeView'), status = $('status'), drop = $('drop'), clearBtn = $('clearBtn');
+  const htmlExt = /\.html?$/i, cssExt = /\.css$/i, jsExt = /\.(js|mjs|cjs)$/i;
+  const textExt = /\.(txt|md|json|xml|csv|py|java|c|cpp|h|hpp|ts|tsx|jsx|sh|yml|yaml|toml|ini|sql|rs|go|php|rb|swift|kt|kts)$/i;
+  const imageExt = /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i, audioExt = /\.(mp3|wav|ogg|m4a|aac|flac)$/i, videoExt = /\.(mp4|webm|mov|m4v|ogv)$/i, pdfExt = /\.pdf$/i;
+  function ext(name){ const m=name.match(/\.[^.]+$/); return m ? m[0].toLowerCase() : ''; }
+  function setStatus(msg,error=false){status.textContent=msg;status.classList.toggle('error',error)}
+  function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function revokeAll(){for(const u of state.objectUrls) URL.revokeObjectURL(u); state.objectUrls.clear()}
+  function makeUrl(file){const u=URL.createObjectURL(file);state.objectUrls.add(u);return u}
+  function icon(file){const e=ext(file.name); if(htmlExt.test(e))return'🌐';if(cssExt.test(e))return'🎨';if(jsExt.test(e))return'📜';if(imageExt.test(e))return'🖼️';if(audioExt.test(e))return'🔊';if(videoExt.test(e))return'🎬';if(pdfExt.test(e))return'📕';return'📄'}
+  function renderList(){
+    fileList.replaceChildren();
+    if(!state.files.size){fileList.innerHTML='<div class="empty">Upload HTML, CSS, JavaScript, images, text, audio, video, or PDF files.</div>';clearBtn.disabled=true;return}
+    clearBtn.disabled=false;
+    for(const file of state.files.values()){
+      const b=document.createElement('button'); b.className='file'+(state.active===file.name?' active':''); b.innerHTML=`<span>${icon(file)}</span><span>${escapeHtml(file.name)}</span><small>${Math.max(1,Math.round(file.size/1024))} KB</small>`;
+      b.addEventListener('click',()=>selectFile(file.name)); fileList.appendChild(b);
+    }
+  }
+  async function readText(file){return await file.text()}
+  function findProjectHtml(){
+    const candidates=['index.html','index.htm'];
+    for(const n of candidates) if(state.files.has(n)) return state.files.get(n);
+    return [...state.files.values()].find(f=>htmlExt.test(f.name));
+  }
+  function buildWebProject(){
+    const htmlFile=findProjectHtml(); if(!htmlFile)return null;
+    const filesByPath=new Map([...state.files.values()].map(f=>[f.name,f]));
+    let html=htmlFile._text;
+    // Replace local asset references with blob URLs for uploaded files.
+    for(const f of state.files.values()){
+      if(f===htmlFile)continue;
+      const url=makeUrl(f); const safeName=f.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+      html=html.replace(new RegExp(`(["'(])(?:\\./)?${safeName}(["')])`,'g'),'$1'+url+'$2');
+      // Also handle common root-relative references.
+      html=html.replace(new RegExp(`(["'(])/${safeName}(["')])`,'g'),'$1'+url+'$2');
+    }
+    // If separate CSS/JS files exist but aren't linked, do not silently inject them; normal site behavior requires links/scripts.
+    return {html, file:htmlFile};
+  }
+  async function selectFile(name){
+    state.active=name; renderList(); const f=state.files.get(name); if(!f)return;
+    previewPane.replaceChildren(); codeView.textContent='';
+    const e=ext(f.name);
+    try{
+      if(htmlExt.test(e)){
+        for(const x of state.files.values()) if(x._text===undefined && (htmlExt.test(x.name)||cssExt.test(x.name)||jsExt.test(x.name)||textExt.test(x.name))) x._text=await readText(x);
+        revokeAll(); const project=buildWebProject();
+        const iframe=document.createElement('iframe'); iframe.className='preview-frame'; iframe.sandbox='allow-scripts';
+        iframe.srcdoc=project.html; previewPane.appendChild(iframe); codeView.textContent=f._text; setStatus(`Running ${f.name} in an isolated preview.`);
+      } else if(imageExt.test(e)){const img=document.createElement('img');img.src=makeUrl(f);previewPane.innerHTML='<div class="media"></div>';previewPane.firstChild.appendChild(img);codeView.textContent='Binary image file';setStatus(`Showing ${f.name}.`)}
+      else if(audioExt.test(e)){const a=document.createElement('audio');a.controls=true;a.src=makeUrl(f);previewPane.innerHTML='<div class="media"></div>';previewPane.firstChild.appendChild(a);codeView.textContent='Binary audio file';setStatus(`Playing ${f.name}.`)}
+      else if(videoExt.test(e)){const v=document.createElement('video');v.controls=true;v.src=makeUrl(f);previewPane.innerHTML='<div class="media"></div>';previewPane.firstChild.appendChild(v);codeView.textContent='Binary video file';setStatus(`Showing ${f.name}.`)}
+      else if(pdfExt.test(e)){const iframe=document.createElement('iframe');iframe.className='pdf';iframe.src=makeUrl(f);previewPane.appendChild(iframe);codeView.textContent='PDF file';setStatus(`Showing ${f.name}.`)}
+      else if(cssExt.test(e)||jsExt.test(e)||textExt.test(e)||f.type.startsWith('text/')){f._text=await readText(f);codeView.textContent=f._text;previewPane.innerHTML='<div class="unsupported"><div><strong>This file is code/text.</strong>Open the Code tab to view it.<div class="badge">'+escapeHtml(e||'text')+'</div></div></div>';setStatus(`Viewing ${f.name} as text.`)}
+      else{codeView.textContent='Binary file — no previewer is included in Version 1.';previewPane.innerHTML='<div class="unsupported"><div><strong>No preview available</strong>'+escapeHtml(f.name)+'<div class="badge">'+escapeHtml(f.type||e||'unknown')+'</div></div></div>';setStatus(`No previewer for ${f.name}.`)}
+    }catch(err){previewPane.innerHTML='<div class="unsupported"><div><strong>Preview error</strong>'+escapeHtml(err.message)+'</div></div>';setStatus(`Could not preview ${f.name}: ${err.message}`,true)}
+  }
+  async function addFiles(list){
+    const arr=[...list]; if(!arr.length)return;
+    for(const f of arr) state.files.set(f.name,f);
+    renderList(); const first=arr.find(f=>htmlExt.test(f.name))||arr[0]; await selectFile(first.name); setStatus(`${arr.length} file${arr.length===1?'':'s'} added.`);
+  }
+  $('uploadBtn').addEventListener('click',()=>fileInput.click());
+  fileInput.addEventListener('change',e=>{addFiles(e.target.files);fileInput.value=''});
+  clearBtn.addEventListener('click',()=>{state.files.clear();state.active=null;revokeAll();renderList();previewPane.replaceChildren();codeView.textContent='';setStatus('Cleared. Upload files to begin.')});
+  document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.pane').forEach(x=>x.classList.remove('active'));t.classList.add('active');$(t.dataset.tab+'Pane').classList.add('active')}));
+  ['dragenter','dragover'].forEach(type=>document.addEventListener(type,e=>{e.preventDefault();drop.classList.add('show')}));
+  ['dragleave','drop'].forEach(type=>document.addEventListener(type,e=>{e.preventDefault();if(type==='drop')addFiles(e.dataTransfer.files);drop.classList.remove('show')}));
+  window.addEventListener('beforeunload',revokeAll);
+  renderList();
+})();
+</script>
+</body>
+</html>
